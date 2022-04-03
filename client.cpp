@@ -66,36 +66,32 @@ int main(int argc, char **argv) {
     std::cout << "Enter your username" << std::endl;
     std::cin >> user;
 
-    toServer += user;
-    toServer += ": ";
-
-    std::cout << "Welcome " << user << " !" << std::endl;
+    std::cout << "Welcome " << user << " !\n" << std::endl;
+    auto s = RobustIO::read_string(sock);
+    printf("Past Messages:\n%s\n", s.c_str());
 
     while(message != "exit"){
-        auto s = RobustIO::read_string(sock);
-        printf("Past Messages:\n%s\n", s.c_str());
-        
         std::cout << user << ": ";
-        //std::getline(std::cin, message);
-        std::cin >> message;
+        std::getline(std::cin, message);
+        //std::cin >> message;
 
-        //toServer = user + ": " + message;
-        toServer += message;
+        if(message == "exit"){
+            RobustIO::write_string(sock, "exit"); 
+            break;
+        }
 
-        //std::cout << "MESSAGE: " << message << std::endl;
+        toServer = user + ": " + message;
 
         if(!message.empty()){
-            std::cout << "writing to server" << std::endl;
+            //std::cout << "writing to server" << std::endl;
             RobustIO::write_string(sock, toServer); 
-            toServer = "";
+            toServer.clear();
+            s = RobustIO::read_string(sock);
+            printf("%s\n", s.c_str());
         }
         
         
     }
-
-    RobustIO::write_string(sock, "exit"); 
-
-    //RobustIO::
 
 	close(sock);
 

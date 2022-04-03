@@ -36,6 +36,10 @@ int main(int argc, char **argv) {
 	char buffer[512];
 	int len;
 
+	std::string msg;
+
+	bool connected;
+
 	std::queue<std::string> history;
 
 	// Clear the address hints structure
@@ -78,30 +82,51 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+	conn = accept(sock, (struct sockaddr*) &address, &addrLength);
+	if(conn < 0){
+		printf("accepting client failed\n");
+		exit(1);
+	}
+
+	connected = true;
+
+	if(history.empty()){
+		RobustIO::write_string(conn, "No Old Messages!!");
+	}
+
+	else{
+		RobustIO::write_string(conn, readHistory(history));
+	}
+
 	// When we get a new connection, try reading some data from it!
-    while ((conn = accept(sock, (struct sockaddr*) &address, &addrLength)) >= 0) {
-        
-		
-		if(history.empty()){
-			RobustIO::write_string(conn, "No Old Messages!!");
+    while (connected) {
+
+		auto s = RobustIO::read_string(conn);
+		msg = s.c_str();
+
+		if(msg == "exit"){
+			close(conn);
 		}
 
-		else if(!history.empty()){
-			RobustIO::write_string(conn, readHistory(history));
+		history.push(msg);
+
+		if(history.size() > 12){
+			history.pop();
 		}
 
+		RobustIO::write_string(conn, history.back());
+
 		
 
-		auto s = RobustIO::read_string(sock);
+		/*
 		
-		if(!s.empty()){
-			std::cout << "BRO PLS MSG IN" << std::endl;
-			history.push(s);
+		if(!RobustIO::read_string(conn).empty()){
+			history.push(RobustIO::read_string(conn));
 				if(history.size() > 12){
 					history.pop();
 				}
 			RobustIO::write_string(conn, readHistory(history));
-		}
+		} */
 
 		
 		
@@ -110,17 +135,10 @@ int main(int argc, char **argv) {
 		//	history.push(RobustIO::read_string(conn));
 		//}
 		
-
-		
-
-		
-		
 		//auto s = RobustIO::read_string(conn);
 		//printf("Received from client: %s\n", s.c_str());
 		
-		if(RobustIO::read_string(conn) == "exit"){
-			close(conn);
-		}
+		
 		
     }
 
