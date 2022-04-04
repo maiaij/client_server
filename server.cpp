@@ -7,10 +7,15 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#include <pthread.h>
 #include <iostream>
 #include <queue>
+#include <list>
 
 #include "RobustIO.h"
+
+std::queue<std::string> history;
+std::list<int> users;
 
 std::string readHistory(std::queue<std::string> history){
 	std::string result = "";
@@ -25,6 +30,45 @@ std::string readHistory(std::queue<std::string> history){
 	return result;
 }
 
+void *chatHandling(void *conn){
+	bool connected = true;
+	std::string msg;
+
+	if(history.empty()){
+		RobustIO::write_string(*((int *)conn), "No Old Messages!!\n");
+	}
+
+	else{
+		RobustIO::write_string(*((int *)conn), readHistory(history));
+	}
+
+	// When we get a new connection, try reading some data from it!
+    while (connected) {
+
+		auto s = RobustIO::read_string(*((int *)conn));
+		msg = s.c_str();
+
+		if(msg == "exit"){
+			close(*((int *)conn));
+		}
+
+		history.push(msg);
+
+		if(history.size() > 12){
+			history.pop();
+		}
+
+		for(int i: users){
+			//if(*((int *)conn) != i){
+				RobustIO::write_string(i, history.back());
+			//}
+		}
+		
+    }
+
+	pthread_exit(NULL);
+}
+
 int main(int argc, char **argv) {
 	int sock, conn;
 	int i;
@@ -35,12 +79,20 @@ int main(int argc, char **argv) {
 	struct addrinfo *addr;
 	char buffer[512];
 	int len;
+	
+	
 
-	std::string msg;
+	//variables for the multithreading
+	int clientMax = 3;
+	int clients[clientMax];
+	int counter = 0;
+	pthread_t tid;
+	pthread_attr_t attr;
 
-	bool connected;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	std::queue<std::string> history;
+	int *arg = (int *)malloc(sizeof(*arg));
 
 	// Clear the address hints structure
     memset(&hints, 0, sizeof(hints));
@@ -82,64 +134,32 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
-	conn = accept(sock, (struct sockaddr*) &address, &addrLength);
-	if(conn < 0){
-		printf("accepting client failed\n");
-		exit(1);
-	}
-
-	connected = true;
-
-	if(history.empty()){
-		RobustIO::write_string(conn, "No Old Messages!!");
-	}
-
-	else{
-		RobustIO::write_string(conn, readHistory(history));
-	}
-
-	// When we get a new connection, try reading some data from it!
-    while (connected) {
-
-		auto s = RobustIO::read_string(conn);
-		msg = s.c_str();
-
-		if(msg == "exit"){
-			close(conn);
+	// mutithread
+	while(counter != clientMax){
+		clients[counter] = accept(sock, (struct sockaddr*) &address, &addrLength);
+		
+		if(clients[counter] < 0){
+			printf("accepting client failed\n");
+			exit(1);
 		}
 
-		history.push(msg);
+		users.push_back(clients[counter]);
 
-		if(history.size() > 12){
-			history.pop();
-		}
-
-		RobustIO::write_string(conn, history.back());
+		*arg = clients[counter];
+		rc = pthread_create(&tid, &attr, chatHandling, arg);
+		counter++;
 
 		
+	}
 
-		/*
-		
-		if(!RobustIO::read_string(conn).empty()){
-			history.push(RobustIO::read_string(conn));
-				if(history.size() > 12){
-					history.pop();
-				}
-			RobustIO::write_string(conn, readHistory(history));
-		} */
+	pthread_attr_destroy(&attr);
+	pthread_exit(NULL);
 
-		
-		
-		//else if(readHistory(history) != ""){
-		//	RobustIO::write_string(conn, readHistory(history));
-		//	history.push(RobustIO::read_string(conn));
-		//}
-		
-		//auto s = RobustIO::read_string(conn);
-		//printf("Received from client: %s\n", s.c_str());
-		
-		
-		
-    }
+	for (int i = 0; i < clientMax; i++){
+		close(clients[i]);
+	}
+
+	close(sock);
+	
 
 }

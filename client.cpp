@@ -6,20 +6,44 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include <pthread.h>
 #include <iostream>
 
 #include "RobustIO.h"
+
+void *chatHandling(void *arg){
+    
+    int sock = *(int*) arg;
+
+    while(1){
+        auto s = RobustIO::read_string(sock);
+        std::cout << s << std::endl;
+    }
+
+    pthread_exit(NULL);
+}
 
 int main(int argc, char **argv) {
 	struct addrinfo hints;
 	struct addrinfo *addr;
 	struct sockaddr_in *addrinfo;
-	int rc;
+	int rc, rc1, rc2;
 	int sock;
 	char buffer[512];
 	int len;
 
+    //std::string message, user, toServer;
     std::string message, user, toServer;
+    bool connected;
+
+    pthread_t tid;
+	pthread_attr_t attr;
+
+    pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+    int *arg = (int *)malloc(sizeof(*arg));
 
     // Clear the data structure to hold address parameters
     memset(&hints, 0, sizeof(hints));
@@ -55,13 +79,10 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    rc1 = listen(sock, 5);
+
     // Clear the address struct
     freeaddrinfo(addr);
-
-    // Write a test string to the server.
-    //RobustIO::write_string(sock, "testing the new functions!!");
-    //auto s = RobustIO::read_string(sock);
-    //printf("Received from SERVER: %s\n", s.c_str());
 
     std::cout << "Enter your username" << std::endl;
     std::cin >> user;
@@ -70,31 +91,24 @@ int main(int argc, char **argv) {
     auto s = RobustIO::read_string(sock);
     printf("Past Messages:\n%s\n", s.c_str());
 
-    while(message != "exit"){
-        std::cout << user << ": ";
+    *arg = sock;
+    rc2 = pthread_create(&tid, &attr, chatHandling, arg);
+
+    while(rc == 0){
         std::getline(std::cin, message);
-        //std::cin >> message;
 
         if(message == "exit"){
             RobustIO::write_string(sock, "exit"); 
-            break;
+            rc = 1;
+            exit(1);
         }
 
-        toServer = user + ": " + message;
-
-        if(!message.empty()){
-            //std::cout << "writing to server" << std::endl;
+        else if(!message.empty()){
+            toServer = user + ": " + message;
             RobustIO::write_string(sock, toServer); 
             toServer.clear();
-            s = RobustIO::read_string(sock);
-            printf("%s\n", s.c_str());
         }
-        
-        
     }
-
-	close(sock);
-
-    
+    close(sock);
 
 }
